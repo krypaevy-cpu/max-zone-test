@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Грин Ривер</title>
+</head>
+<body>
+    <h2>Цифровой паспорт зоны</h2>
+
+    <div id="zone">Определяю зону...</div>
+
+    <script>
+        const webApp = window.WebApp;
+
+        const startParam =
+            webApp &&
+            webApp.initDataUnsafe &&
+            webApp.initDataUnsafe.start_param;
+
+        document.getElementById("zone").innerText =
+            "Получена зона: " + (startParam || "параметр не получен");
+    </script>
+</body>
+</html>
