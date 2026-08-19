@@ -18,20 +18,35 @@
 <div id="employee-panel" style="display:none; margin-top:25px;">
     <hr>
     <h3>Служебный режим</h3>
-    <button id="clean-button" style="font-size:18px; padding:12px 20px;">
+
+    <button
+        id="clean-button"
+        style="font-size:18px; padding:12px 20px;"
+    >
         Уборка выполнена
     </button>
+
+    <div id="result" style="margin-top:15px;"></div>
 </div>
 
-<div id="debug" style="margin-top:30px; font-size:12px;"></div>
-
 <script>
+
+const GITHUB_TOKEN = "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";
+
+const OWNER = "krypaevy-cpu";
+const REPO = "max-zone-test";
+const FILE = "zones.json";
+const BRANCH = "main";
+
+let currentZoneId = null;
+let currentUserId = null;
+
 
 async function loadZone() {
 
     const webApp = window.WebApp;
 
-    const zoneId =
+    currentZoneId =
         webApp &&
         webApp.initDataUnsafe &&
         webApp.initDataUnsafe.start_param;
@@ -41,7 +56,11 @@ async function loadZone() {
         webApp.initDataUnsafe &&
         webApp.initDataUnsafe.user;
 
-    if (!zoneId) {
+    if (user) {
+        currentUserId = Number(user.id);
+    }
+
+    if (!currentZoneId) {
         document.getElementById("content").innerText =
             "Не удалось определить зону";
         return;
@@ -55,49 +74,20 @@ async function loadZone() {
 
         const zones = await response.json();
 
-        if (!zones[zoneId]) {
+        if (!zones[currentZoneId]) {
             document.getElementById("content").innerText =
                 "Зона не найдена";
             return;
         }
 
-        const zone = zones[zoneId];
+        showZone(zones[currentZoneId]);
 
-        document.getElementById("content").innerHTML =
-            "<h3>" + zone.name + "</h3>" +
-            "<p><b>Последняя уборка:</b> " +
-            zone.last_cleaning + "</p>" +
-            "<p><b>Статус:</b> " +
-            zone.status + "</p>";
-
-        // Показываем, какой user_id MAX передал Mini App
-        if (user) {
-
-            document.getElementById("debug").innerText =
-                "USER ID: " + user.id;
-
-            // Пока сотрудником считаем тебя
-            if (Number(user.id) === 58699171) {
-
-                document.getElementById(
-                    "employee-panel"
-                ).style.display = "block";
-            }
-
-        } else {
-
-            document.getElementById("debug").innerText =
-                "USER ID не получен";
+        // Пока сотрудник только ты
+        if (currentUserId === 58699171) {
+            document.getElementById(
+                "employee-panel"
+            ).style.display = "block";
         }
-
-        document.getElementById(
-            "clean-button"
-        ).onclick = function() {
-
-            alert(
-                "ТЕСТ: уборка выполнена в зоне " + zoneId
-            );
-        };
 
     } catch (error) {
 
@@ -106,6 +96,187 @@ async function loadZone() {
 
     }
 }
+
+
+function showZone(zone) {
+
+    document.getElementById("content").innerHTML =
+        "<h3>" + zone.name + "</h3>" +
+        "<p><b>Последняя уборка:</b> " +
+        zone.last_cleaning + "</p>" +
+        "<p><b>Статус:</b> " +
+        zone.status + "</p>";
+}
+
+
+async function cleaningDone() {
+
+    const result =
+        document.getElementById("result");
+
+    result.innerText = "Фиксирую уборку...";
+
+    try {
+
+        // Получаем текущий zones.json через GitHub API
+        const apiUrl =
+            "https://api.github.com/repos/" +
+            OWNER + "/" +
+            REPO +
+            "/contents/" +
+            FILE;
+
+        const getResponse = await fetch(
+            apiUrl + "?ref=" + BRANCH,
+            {
+                headers: {
+                    "Authorization":
+                        "Bearer " + GITHUB_TOKEN,
+
+                    "Accept":
+                        "application/vnd.github+json"
+                }
+            }
+        );
+
+        if (!getResponse.ok) {
+            throw new Error(
+                "Не удалось получить zones.json"
+            );
+        }
+
+        const fileData =
+            await getResponse.json();
+
+        // GitHub возвращает файл в Base64
+        const decodedText =
+            decodeURIComponent(
+                escape(
+                    atob(
+                        fileData.content.replace(
+                            /\n/g,
+                            ""
+                        )
+                    )
+                )
+            );
+
+        const zones =
+            JSON.parse(decodedText);
+
+        if (!zones[currentZoneId]) {
+            throw new Error(
+                "Зона не найдена"
+            );
+        }
+
+        // Текущее время
+        const now =
+            new Date();
+
+        const formatted =
+            now.toLocaleString(
+                "ru-RU",
+                {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                }
+            ).replace(",", "");
+
+        // Обновляем данные зоны
+        zones[currentZoneId].last_cleaning =
+            formatted;
+
+        zones[currentZoneId].status =
+            "Уборка выполнена";
+
+        const newJson =
+            JSON.stringify(
+                zones,
+                null,
+                2
+            );
+
+        // Кодируем обратно в Base64
+        const encoded =
+            btoa(
+                unescape(
+                    encodeURIComponent(
+                        newJson
+                    )
+                )
+            );
+
+        // Отправляем новый zones.json в GitHub
+        const putResponse =
+            await fetch(
+                apiUrl,
+                {
+                    method: "PUT",
+
+                    headers: {
+                        "Authorization":
+                            "Bearer " +
+                            GITHUB_TOKEN,
+
+                        "Accept":
+                            "application/vnd.github+json",
+
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        message:
+                            "Cleaning completed from MAX Mini App",
+
+                        content:
+                            encoded,
+
+                        sha:
+                            fileData.sha,
+
+                        branch:
+                            BRANCH
+                    })
+                }
+            );
+
+        if (!putResponse.ok) {
+
+            const errorText =
+                await putResponse.text();
+
+            throw new Error(
+                errorText
+            );
+        }
+
+        result.innerText =
+            "Уборка зафиксирована: " +
+            formatted;
+
+        showZone(
+            zones[currentZoneId]
+        );
+
+    } catch (error) {
+
+        console.error(error);
+
+        result.innerText =
+            "Ошибка фиксации уборки";
+
+    }
+}
+
+
+document.getElementById(
+    "clean-button"
+).onclick = cleaningDone;
 
 loadZone();
 
