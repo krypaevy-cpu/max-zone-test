@@ -17,6 +17,7 @@
 
 <div id="employee-panel" style="display:none; margin-top:25px;">
     <hr>
+
     <h3>Служебный режим</h3>
 
     <button
@@ -26,8 +27,12 @@
         Уборка выполнена
     </button>
 
-    <div id="result" style="margin-top:15px;"></div>
+    <div
+        id="result"
+        style="margin-top:15px; white-space:pre-wrap;"
+    ></div>
 </div>
+
 
 <script>
 
@@ -38,9 +43,37 @@ const REPO = "max-zone-test";
 const FILE = "zones.json";
 const BRANCH = "main";
 
+const API_URL =
+    "https://api.github.com/repos/" +
+    OWNER + "/" +
+    REPO +
+    "/contents/" +
+    FILE;
+
 let currentZoneId = null;
 let currentUserId = null;
 
+
+/* --------------------------------------------------
+   ПОКАЗ КАРТОЧКИ ЗОНЫ
+-------------------------------------------------- */
+
+function showZone(zone) {
+
+    document.getElementById("content").innerHTML =
+        "<h3>" + zone.name + "</h3>" +
+        "<p><b>Последняя уборка:</b> " +
+        zone.last_cleaning +
+        "</p>" +
+        "<p><b>Статус:</b> " +
+        zone.status +
+        "</p>";
+}
+
+
+/* --------------------------------------------------
+   ПЕРВИЧНАЯ ЗАГРУЗКА ЗОНЫ
+-------------------------------------------------- */
 
 async function loadZone() {
 
@@ -61,29 +94,55 @@ async function loadZone() {
     }
 
     if (!currentZoneId) {
+
         document.getElementById("content").innerText =
             "Не удалось определить зону";
+
         return;
     }
 
     try {
 
+        /*
+        Для обычного просмотра читаем zones.json
+        непосредственно с GitHub Pages.
+        */
+
         const response = await fetch(
-            "zones.json?ts=" + Date.now()
+            "zones.json?ts=" + Date.now(),
+            {
+                cache: "no-store"
+            }
         );
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Ошибка загрузки zones.json: HTTP " +
+                response.status
+            );
+        }
 
         const zones = await response.json();
 
         if (!zones[currentZoneId]) {
+
             document.getElementById("content").innerText =
                 "Зона не найдена";
+
             return;
         }
 
-        showZone(zones[currentZoneId]);
+        showZone(
+            zones[currentZoneId]
+        );
 
-        // Пока сотрудник только ты
+        /*
+        Пока служебный пользователь только один.
+        */
+
         if (currentUserId === 58699171) {
+
             document.getElementById(
                 "employee-panel"
             ).style.display = "block";
@@ -92,87 +151,105 @@ async function loadZone() {
     } catch (error) {
 
         document.getElementById("content").innerText =
-            "Ошибка загрузки данных";
-
+            "Ошибка загрузки данных:\n" +
+            error.message;
     }
 }
 
 
-function showZone(zone) {
-
-    document.getElementById("content").innerHTML =
-        "<h3>" + zone.name + "</h3>" +
-        "<p><b>Последняя уборка:</b> " +
-        zone.last_cleaning + "</p>" +
-        "<p><b>Статус:</b> " +
-        zone.status + "</p>";
-}
-
+/* --------------------------------------------------
+   ФИКСАЦИЯ УБОРКИ
+-------------------------------------------------- */
 
 async function cleaningDone() {
 
     const result =
         document.getElementById("result");
 
-    result.innerText = "Фиксирую уборку...";
+    result.innerText =
+        "Фиксирую уборку...";
 
     try {
 
-        // Получаем текущий zones.json через GitHub API
-        const apiUrl =
-            "https://api.github.com/repos/" +
-            OWNER + "/" +
-            REPO +
-            "/contents/" +
-            FILE;
+        /*
+        ШАГ 1.
+        Получаем текущий файл через GitHub API.
+
+        Репозиторий публичный, поэтому специально
+        НЕ передаём GitHub-токен на чтение.
+        */
 
         const getResponse = await fetch(
-            apiUrl + "?ref=" + BRANCH,
+            API_URL + "?ref=" + BRANCH,
             {
-                headers: {
-                    "Authorization":
-                        "Bearer " + GITHUB_TOKEN,
+                method: "GET",
 
+                headers: {
                     "Accept":
-                        "application/vnd.github+json"
+                        "application/vnd.github+json",
+
+                    "X-GitHub-Api-Version":
+                        "2022-11-28"
                 }
             }
         );
 
         if (!getResponse.ok) {
+
+            const errorText =
+                await getResponse.text();
+
             throw new Error(
-                "Не удалось получить zones.json"
+                "Ошибка чтения GitHub\n" +
+                "HTTP " +
+                getResponse.status +
+                "\n" +
+                errorText
             );
         }
 
         const fileData =
             await getResponse.json();
 
-        // GitHub возвращает файл в Base64
+
+        /*
+        ШАГ 2.
+        Декодируем содержимое zones.json.
+        */
+
+        const base64Text =
+            fileData.content.replace(
+                /\n/g,
+                ""
+            );
+
         const decodedText =
             decodeURIComponent(
                 escape(
-                    atob(
-                        fileData.content.replace(
-                            /\n/g,
-                            ""
-                        )
-                    )
+                    atob(base64Text)
                 )
             );
 
         const zones =
             JSON.parse(decodedText);
 
+
         if (!zones[currentZoneId]) {
+
             throw new Error(
-                "Зона не найдена"
+                "Зона " +
+                currentZoneId +
+                " не найдена"
             );
         }
 
-        // Текущее время
-        const now =
-            new Date();
+
+        /*
+        ШАГ 3.
+        Формируем текущее время.
+        */
+
+        const now = new Date();
 
         const formatted =
             now.toLocaleString(
@@ -186,12 +263,23 @@ async function cleaningDone() {
                 }
             ).replace(",", "");
 
-        // Обновляем данные зоны
+
+        /*
+        ШАГ 4.
+        Изменяем данные зоны.
+        */
+
         zones[currentZoneId].last_cleaning =
             formatted;
 
         zones[currentZoneId].status =
             "Уборка выполнена";
+
+
+        /*
+        ШАГ 5.
+        Превращаем обновлённый JSON обратно в Base64.
+        */
 
         const newJson =
             JSON.stringify(
@@ -200,7 +288,6 @@ async function cleaningDone() {
                 2
             );
 
-        // Кодируем обратно в Base64
         const encoded =
             btoa(
                 unescape(
@@ -210,10 +297,17 @@ async function cleaningDone() {
                 )
             );
 
-        // Отправляем новый zones.json в GitHub
+
+        /*
+        ШАГ 6.
+        Записываем новый zones.json на GitHub.
+
+        Здесь GitHub-токен уже нужен.
+        */
+
         const putResponse =
             await fetch(
-                apiUrl,
+                API_URL,
                 {
                     method: "PUT",
 
@@ -225,11 +319,15 @@ async function cleaningDone() {
                         "Accept":
                             "application/vnd.github+json",
 
+                        "X-GitHub-Api-Version":
+                            "2022-11-28",
+
                         "Content-Type":
                             "application/json"
                     },
 
                     body: JSON.stringify({
+
                         message:
                             "Cleaning completed from MAX Mini App",
 
@@ -245,40 +343,59 @@ async function cleaningDone() {
                 }
             );
 
-if (!putResponse.ok) {
 
-    const errorText = await putResponse.text();
+        if (!putResponse.ok) {
 
-    throw new Error(
-        "GitHub HTTP " +
-        putResponse.status +
-        ": " +
-        errorText
-    );
-}
+            const errorText =
+                await putResponse.text();
+
+            throw new Error(
+                "Ошибка записи GitHub\n" +
+                "HTTP " +
+                putResponse.status +
+                "\n" +
+                errorText
+            );
+        }
+
+
+        /*
+        ШАГ 7.
+        Обновляем карточку прямо на экране.
+        */
 
         result.innerText =
-            "Уборка зафиксирована: " +
+            "Уборка зафиксирована\n" +
             formatted;
 
         showZone(
             zones[currentZoneId]
         );
 
+
     } catch (error) {
 
         console.error(error);
 
         result.innerText =
-            "ОШИБКА:\n" + error.message;
-
+            "ОШИБКА:\n" +
+            error.message;
     }
 }
 
 
+/* --------------------------------------------------
+   КНОПКА
+-------------------------------------------------- */
+
 document.getElementById(
     "clean-button"
 ).onclick = cleaningDone;
+
+
+/* --------------------------------------------------
+   СТАРТ
+-------------------------------------------------- */
 
 loadZone();
 
