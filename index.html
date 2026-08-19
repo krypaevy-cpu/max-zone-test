@@ -245,15 +245,17 @@ async function cleaningDone() {
                 }
             );
 
-        if (!putResponse.ok) {
+if (!putResponse.ok) {
 
-            const errorText =
-                await putResponse.text();
+    const errorText = await putResponse.text();
 
-            throw new Error(
-                errorText
-            );
-        }
+    throw new Error(
+        "GitHub HTTP " +
+        putResponse.status +
+        ": " +
+        errorText
+    );
+}
 
         result.innerText =
             "Уборка зафиксирована: " +
@@ -268,7 +270,7 @@ async function cleaningDone() {
         console.error(error);
 
         result.innerText =
-            "Ошибка фиксации уборки";
+            "ОШИБКА:\n" + error.message;
 
     }
 }
