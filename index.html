@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Грин Ривер</title>
+
     <script src="https://st.max.ru/js/max-web-app.js"></script>
 </head>
 
@@ -13,7 +15,18 @@
 
 <div id="content">Загрузка...</div>
 
+<div id="employee-panel" style="display:none; margin-top:25px;">
+    <hr>
+    <h3>Служебный режим</h3>
+    <button id="clean-button" style="font-size:18px; padding:12px 20px;">
+        Уборка выполнена
+    </button>
+</div>
+
+<div id="debug" style="margin-top:30px; font-size:12px;"></div>
+
 <script>
+
 async function loadZone() {
 
     const webApp = window.WebApp;
@@ -23,6 +36,11 @@ async function loadZone() {
         webApp.initDataUnsafe &&
         webApp.initDataUnsafe.start_param;
 
+    const user =
+        webApp &&
+        webApp.initDataUnsafe &&
+        webApp.initDataUnsafe.user;
+
     if (!zoneId) {
         document.getElementById("content").innerText =
             "Не удалось определить зону";
@@ -30,6 +48,7 @@ async function loadZone() {
     }
 
     try {
+
         const response = await fetch(
             "zones.json?ts=" + Date.now()
         );
@@ -46,16 +65,50 @@ async function loadZone() {
 
         document.getElementById("content").innerHTML =
             "<h3>" + zone.name + "</h3>" +
-            "<p><b>Последняя уборка:</b> " + zone.last_cleaning + "</p>" +
-            "<p><b>Статус:</b> " + zone.status + "</p>";
+            "<p><b>Последняя уборка:</b> " +
+            zone.last_cleaning + "</p>" +
+            "<p><b>Статус:</b> " +
+            zone.status + "</p>";
+
+        // Показываем, какой user_id MAX передал Mini App
+        if (user) {
+
+            document.getElementById("debug").innerText =
+                "USER ID: " + user.id;
+
+            // Пока сотрудником считаем тебя
+            if (Number(user.id) === 58699171) {
+
+                document.getElementById(
+                    "employee-panel"
+                ).style.display = "block";
+            }
+
+        } else {
+
+            document.getElementById("debug").innerText =
+                "USER ID не получен";
+        }
+
+        document.getElementById(
+            "clean-button"
+        ).onclick = function() {
+
+            alert(
+                "ТЕСТ: уборка выполнена в зоне " + zoneId
+            );
+        };
 
     } catch (error) {
+
         document.getElementById("content").innerText =
             "Ошибка загрузки данных";
+
     }
 }
 
 loadZone();
+
 </script>
 
 </body>
