@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Грин Ривер — цифровой паспорт зоны</title>
+    <title>Грин Ривер</title>
 
     <style>
         body {
@@ -16,17 +16,10 @@
 
         h2 {
             font-size: 28px;
-            margin-bottom: 20px;
         }
 
         h3 {
             font-size: 23px;
-        }
-
-        button {
-            font-size: 18px;
-            padding: 12px 20px;
-            margin-top: 10px;
         }
 
         #last-cleaning-photo,
@@ -34,7 +27,7 @@
             display: block;
             max-width: 100%;
             height: auto;
-            margin-top: 12px;
+            margin-top: 15px;
             border-radius: 8px;
         }
 
@@ -42,14 +35,24 @@
             display: none;
         }
 
-        #employee-panel {
+        #employee-status {
+            margin-top: 25px;
+            padding: 18px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
             display: none;
-            margin-top: 28px;
         }
 
-        #result {
-            margin-top: 15px;
-            white-space: pre-wrap;
+        #photo-input {
+            display: none;
+        }
+
+        #camera-button {
+            display: none;
+            width: 100%;
+            font-size: 22px;
+            padding: 18px;
+            margin-top: 18px;
         }
 
         #error {
@@ -67,46 +70,23 @@
     Загрузка...
 </div>
 
+<div id="employee-status"></div>
 
-<div id="employee-panel">
+<input
+    id="photo-input"
+    type="file"
+    accept="image/*"
+    capture="environment"
+>
 
-    <hr>
+<button id="camera-button">
+    Сделать фото
+</button>
 
-    <h3>Служебный режим</h3>
-
-    <input
-        type="file"
-        id="photo-input"
-        accept="image/*"
-        capture="environment"
-        style="display:none;"
-    >
-
-    <button id="photo-button">
-        Сделать фото
-    </button>
-
-    <div
-        id="photo-status"
-        style="margin-top:15px;"
-    ></div>
-
-    <img
-        id="photo-preview"
-        alt="Фото после уборки"
-    >
-
-    <button
-        id="clean-button"
-        style="display:none;"
-    >
-        Уборка выполнена
-    </button>
-
-    <div id="result"></div>
-
-</div>
-
+<img
+    id="photo-preview"
+    alt="Фото уборки"
+>
 
 <div id="error"></div>
 
@@ -123,6 +103,9 @@ const API_URL =
 const DEFAULT_ZONE_ID =
     "zone_test_01";
 
+const EMPLOYEE_ID =
+    58699171;
+
 const MAX_PHOTO_SIZE =
     800;
 
@@ -131,40 +114,19 @@ const JPEG_QUALITY =
 
 
 /* ==================================================
-   ТЕКУЩЕЕ СОСТОЯНИЕ
+   СОСТОЯНИЕ
 ================================================== */
 
-let currentZoneId =
-    null;
+let currentZoneId = null;
 
-let photoBase64 =
-    null;
+let photoBase64 = null;
+
+let employeeMode = false;
 
 
 /* ==================================================
-   ТЕСТОВЫЙ СЛУЖЕБНЫЙ РЕЖИМ
+   СЛУЖЕБНЫЙ РЕЖИМ
 ================================================== */
-
-/*
-Обычная NFC-метка содержит:
-
-?zone=zone_test_01
-
-
-Чтобы один раз включить служебный режим
-на телефоне уборщицы, открываем:
-
-?zone=zone_test_01&employee=1
-
-
-После этого браузер запомнит,
-что это телефон сотрудника.
-
-
-Чтобы отключить служебный режим:
-
-?zone=zone_test_01&logout=1
-*/
 
 function setupEmployeeMode() {
 
@@ -172,7 +134,6 @@ function setupEmployeeMode() {
         new URLSearchParams(
             window.location.search
         );
-
 
     if (
         params.get("employee") === "1"
@@ -184,7 +145,6 @@ function setupEmployeeMode() {
         );
     }
 
-
     if (
         params.get("logout") === "1"
     ) {
@@ -193,16 +153,11 @@ function setupEmployeeMode() {
             "green_river_employee"
         );
     }
-}
 
-
-function isEmployee() {
-
-    return (
+    employeeMode =
         localStorage.getItem(
             "green_river_employee"
-        ) === "1"
-    );
+        ) === "1";
 }
 
 
@@ -237,9 +192,7 @@ function showZone(zone) {
         zone.status ||
         "Нет данных";
 
-    let photoHtml =
-        "";
-
+    let photoHtml = "";
 
     if (zone.photo_url) {
 
@@ -254,7 +207,6 @@ function showZone(zone) {
             "alt=\"Фото последней уборки\"" +
             ">";
     }
-
 
     document.getElementById(
         "content"
@@ -277,16 +229,10 @@ function showZone(zone) {
 
 
 /* ==================================================
-   ЗАГРУЗКА ЗОНЫ
+   ПОЛУЧЕНИЕ КАРТОЧКИ
 ================================================== */
 
 async function loadZone() {
-
-    document.getElementById(
-        "error"
-    ).innerText =
-        "";
-
 
     try {
 
@@ -296,32 +242,91 @@ async function loadZone() {
                 API_URL +
 
                 "?zone=" +
-
                 encodeURIComponent(
                     currentZoneId
                 ) +
 
                 "&ts=" +
-
                 Date.now(),
 
                 {
-                    method:
-                        "GET",
-
-                    cache:
-                        "no-store"
+                    method: "GET",
+                    cache: "no-store"
                 }
             );
 
+        const data =
+            await response.json();
 
-        if (!response.ok) {
+        if (
+            !response.ok ||
+            data.status !== "ok"
+        ) {
 
             throw new Error(
-                "API HTTP " +
-                response.status
+                data.message ||
+                "Ошибка загрузки зоны"
             );
         }
+
+        showZone(
+            data.zone
+        );
+
+    } catch (error) {
+
+        showError(
+            error.message
+        );
+    }
+}
+
+
+/* ==================================================
+   КАСАНИЕ NFC СОТРУДНИКОМ
+================================================== */
+
+async function employeeTouch() {
+
+    const statusBox =
+        document.getElementById(
+            "employee-status"
+        );
+
+    statusBox.style.display =
+        "block";
+
+    statusBox.innerHTML =
+        "Определяю действие...";
+
+
+    try {
+
+        const response =
+            await fetch(
+                API_URL,
+                {
+                    method:
+                        "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            action:
+                                "touch",
+
+                            zone_id:
+                                currentZoneId,
+
+                            employee_id:
+                                EMPLOYEE_ID
+                        })
+                }
+            );
 
 
         const data =
@@ -329,66 +334,80 @@ async function loadZone() {
 
 
         if (
-            data.status !== "ok" ||
-            !data.zone
+            !response.ok ||
+            data.status !== "ok"
         ) {
 
             throw new Error(
                 data.message ||
-                "Зона не найдена"
+                "Ошибка фиксации касания"
             );
         }
 
 
-        showZone(
-            data.zone
-        );
-
-
-        /*
-        Служебные кнопки показываем
-        только на телефоне сотрудника.
-        */
+        /* ------------------------------------------
+           ПЕРВОЕ КАСАНИЕ
+        ------------------------------------------ */
 
         if (
-            isEmployee()
+            data.result === "STARTED"
         ) {
 
+            statusBox.innerHTML =
+                "<h3>Уборка начата</h3>" +
+                "<p>Начало работ зафиксировано</p>";
+
+            return;
+        }
+
+
+        /* ------------------------------------------
+           ВТОРОЕ КАСАНИЕ
+        ------------------------------------------ */
+
+        if (
+            data.result === "NEED_PHOTO"
+        ) {
+
+            statusBox.innerHTML =
+                "<h3>Завершение уборки</h3>" +
+
+                "<p>Уборка начата: " +
+                data.started_at +
+                "</p>" +
+
+                "<p>Сделайте фото результата</p>";
+
+
             document.getElementById(
-                "employee-panel"
+                "camera-button"
             ).style.display =
                 "block";
+
+            return;
         }
+
+
+        throw new Error(
+            "Неизвестный ответ API"
+        );
 
 
     } catch (error) {
 
-        console.error(
-            error
+        showError(
+            error.message
         );
-
-
-        document.getElementById(
-            "content"
-        ).innerText =
-            "Не удалось загрузить данные";
-
-
-        document.getElementById(
-            "error"
-        ).innerText =
-            "ОШИБКА:\n" +
-            error.message;
     }
 }
 
 
 /* ==================================================
-   КНОПКА "СДЕЛАТЬ ФОТО"
+   ЗАПУСК КАМЕРЫ
 ================================================== */
 
 document.getElementById(
-    "photo-button"
+    "camera-button"
 ).onclick =
     function () {
 
@@ -413,10 +432,19 @@ document.getElementById(
         const file =
             event.target.files[0];
 
-
         if (!file) {
             return;
         }
+
+
+        const statusBox =
+            document.getElementById(
+                "employee-status"
+            );
+
+
+        statusBox.innerHTML =
+            "Обрабатываю фото...";
 
 
         const reader =
@@ -439,11 +467,6 @@ document.getElementById(
                         let height =
                             image.height;
 
-
-                        /*
-                        Уменьшаем фотографию
-                        перед отправкой.
-                        */
 
                         if (
                             width >
@@ -528,10 +551,6 @@ document.getElementById(
                             dataUrl.split(",")[1];
 
 
-                        /*
-                        Показываем сделанное фото.
-                        */
-
                         const preview =
                             document.getElementById(
                                 "photo-preview"
@@ -546,37 +565,22 @@ document.getElementById(
                             "block";
 
 
-                        document.getElementById(
-                            "photo-status"
-                        ).innerText =
-                            "Фото сделано";
-
-
                         /*
-                        После фото появляется
-                        кнопка фиксации уборки.
+                        Фото уже сделано.
+                        Никакой кнопки подтверждения.
+                        Сразу завершаем уборку.
                         */
 
-                        document.getElementById(
-                            "clean-button"
-                        ).style.display =
-                            "inline-block";
-
-
-                        document.getElementById(
-                            "result"
-                        ).innerText =
-                            "";
+                        finishCleaning();
                     };
 
 
                 image.onerror =
                     function () {
 
-                        document.getElementById(
-                            "result"
-                        ).innerText =
-                            "Не удалось обработать фото";
+                        showError(
+                            "Не удалось обработать фото"
+                        );
                     };
 
 
@@ -588,10 +592,9 @@ document.getElementById(
         reader.onerror =
             function () {
 
-                document.getElementById(
-                    "result"
-                ).innerText =
-                    "Не удалось прочитать фото";
+                showError(
+                    "Не удалось прочитать фото"
+                );
             };
 
 
@@ -603,95 +606,57 @@ document.getElementById(
 
 
 /* ==================================================
-   ФИКСАЦИЯ УБОРКИ
+   АВТОМАТИЧЕСКОЕ ЗАВЕРШЕНИЕ
 ================================================== */
 
-async function cleaningDone() {
+async function finishCleaning() {
 
-    const result =
+    const statusBox =
         document.getElementById(
-            "result"
+            "employee-status"
         );
 
 
-    if (!photoBase64) {
-
-        result.innerText =
-            "Сначала сделайте фото";
-
-        return;
-    }
+    statusBox.innerHTML =
+        "Фиксирую завершение уборки...";
 
 
-    const cleanButton =
-        document.getElementById(
-            "clean-button"
-        );
-
-
-    result.innerText =
-        "Фиксирую уборку...";
-
-
-    cleanButton.disabled =
-        true;
+    document.getElementById(
+        "camera-button"
+    ).style.display =
+        "none";
 
 
     try {
 
         const response =
             await fetch(
-
                 API_URL,
-
                 {
                     method:
                         "POST",
 
                     headers: {
-
                         "Content-Type":
                             "application/json"
                     },
 
                     body:
-                        JSON.stringify(
-                            {
+                        JSON.stringify({
+                            action:
+                                "finish_cleaning",
 
-                                action:
-                                    "cleaning_done",
+                            zone_id:
+                                currentZoneId,
 
-                                zone_id:
-                                    currentZoneId,
+                            employee_id:
+                                EMPLOYEE_ID,
 
-                                employee_id:
-                                    "test_employee",
-
-                                photo:
-                                    photoBase64
-                            }
-                        )
+                            photo:
+                                photoBase64
+                        })
                 }
             );
-
-
-        if (!response.ok) {
-
-            const errorText =
-                await response.text();
-
-
-            throw new Error(
-
-                "API HTTP " +
-
-                response.status +
-
-                "\n" +
-
-                errorText
-            );
-        }
 
 
         const data =
@@ -699,25 +664,22 @@ async function cleaningDone() {
 
 
         if (
+            !response.ok ||
             data.status !== "ok"
         ) {
 
             throw new Error(
-
                 data.message ||
-
-                "Неизвестная ошибка API"
+                "Ошибка завершения уборки"
             );
         }
 
 
-        result.innerText =
-            "Уборка зафиксирована";
+        statusBox.innerHTML =
+            "<h3>Уборка завершена</h3>" +
 
+            "<p>Результат зафиксирован</p>";
 
-        /*
-        Сразу обновляем карточку.
-        */
 
         if (
             data.zone
@@ -729,85 +691,62 @@ async function cleaningDone() {
         }
 
 
-        /*
-        Очищаем сделанное фото.
-        */
-
         photoBase64 =
             null;
 
 
-        document.getElementById(
-            "photo-input"
-        ).value =
-            "";
-
-
-        const preview =
-            document.getElementById(
-                "photo-preview"
-            );
-
-
-        preview.src =
-            "";
-
-
-        preview.style.display =
-            "none";
-
-
-        document.getElementById(
-            "photo-status"
-        ).innerText =
-            "";
-
-
-        cleanButton.style.display =
-            "none";
-
-
-        cleanButton.disabled =
-            false;
-
-
     } catch (error) {
 
-        console.error(
-            error
+        showError(
+            error.message
         );
-
-
-        result.innerText =
-            "ОШИБКА:\n" +
-            error.message;
-
-
-        cleanButton.disabled =
-            false;
     }
 }
 
 
 /* ==================================================
-   КНОПКА ФИКСАЦИИ
+   ОШИБКИ
 ================================================== */
 
-document.getElementById(
-    "clean-button"
-).onclick =
-    cleaningDone;
+function showError(message) {
+
+    document.getElementById(
+        "error"
+    ).innerText =
+        "ОШИБКА:\n" +
+        message;
+}
 
 
 /* ==================================================
    ЗАПУСК
 ================================================== */
 
-setupEmployeeMode();
+async function start() {
 
-detectZone();
+    setupEmployeeMode();
 
-loadZone();
+    detectZone();
+
+    await loadZone();
+
+
+    /*
+    Если телефон авторизован как служебный,
+    само открытие страницы после NFC
+    считается касанием зоны.
+    */
+
+    if (
+        employeeMode
+    ) {
+
+        await employeeTouch();
+    }
+}
+
+
+start();
 
 </script>
 
