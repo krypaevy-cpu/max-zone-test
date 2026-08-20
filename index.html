@@ -21,6 +21,13 @@
             margin-top: 10px;
         }
 
+        #last-cleaning-photo {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            margin-top: 10px;
+        }
+
         #photo-preview {
             display: none;
             margin-top: 15px;
@@ -128,6 +135,26 @@ function showZone(zone) {
     const status =
         zone.status || "Нет данных";
 
+    let photoHtml = "";
+
+    /*
+    Если API вернул ссылку на фотографию,
+    показываем фотографию прямо в карточке зоны.
+    */
+
+    if (zone.photo_url) {
+
+        photoHtml =
+            "<p><b>Фото последней уборки:</b></p>" +
+            "<img " +
+            "id=\"last-cleaning-photo\" " +
+            "src=\"" +
+            zone.photo_url +
+            "\" " +
+            "alt=\"Фото последней уборки\"" +
+            ">";
+    }
+
     document.getElementById("content").innerHTML =
         "<h3>" +
         zone.name +
@@ -139,7 +166,9 @@ function showZone(zone) {
 
         "<p><b>Статус:</b> " +
         status +
-        "</p>";
+        "</p>" +
+
+        photoHtml;
 }
 
 
@@ -564,7 +593,10 @@ async function cleaningDone() {
 
 
         /*
-        API возвращает обновлённую зону.
+        API возвращает обновлённую зону,
+        включая photo_url.
+        Поэтому новая фотография сразу
+        появится в карточке зоны.
         */
 
         if (data.zone) {
@@ -604,6 +636,9 @@ async function cleaningDone() {
 
         cleanButton.style.display =
             "none";
+
+        cleanButton.disabled =
+            false;
 
 
     } catch (error) {
