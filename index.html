@@ -26,15 +26,43 @@
             font-size: 24px;
         }
 
-        button {
+        button,
+        .photo-button {
+            display: inline-block;
             font-size: 18px;
             padding: 14px 22px;
+            border: 1px solid #777;
+            background: #f2f2f2;
+            color: #000;
             cursor: pointer;
+            box-sizing: border-box;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: default;
         }
 
         #employee-panel {
             display: none;
             margin-top: 30px;
+        }
+
+        #photo-input {
+            display: none;
+        }
+
+        #photo-preview {
+            display: none;
+            margin-top: 15px;
+            margin-bottom: 15px;
+            max-width: 100%;
+            max-height: 350px;
+        }
+
+        #photo-status {
+            margin-top: 10px;
+            margin-bottom: 15px;
         }
 
         #result {
@@ -45,6 +73,10 @@
         #error {
             margin-top: 15px;
             white-space: pre-wrap;
+        }
+
+        #clean-button {
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -63,9 +95,32 @@
 
     <h3>Служебный режим</h3>
 
-    <button id="clean-button">
-        Уборка выполнена
-    </button>
+    <label
+        for="photo-input"
+        class="photo-button"
+    >
+        Сделать фото
+    </label>
+
+    <input
+        id="photo-input"
+        type="file"
+        accept="image/*"
+        capture="environment"
+    >
+
+    <div id="photo-status"></div>
+
+    <img
+        id="photo-preview"
+        alt="Фото после уборки"
+    >
+
+    <div>
+        <button id="clean-button">
+            Уборка выполнена
+        </button>
+    </div>
 
     <div id="result"></div>
 
@@ -76,39 +131,21 @@
 
 <script>
 
-/*
---------------------------------------------------
-НАШ API В YANDEX CLOUD
---------------------------------------------------
-*/
-
 const API_URL =
     "https://functions.yandexcloud.net/d4e0v5uck2oc0924pbeg";
 
 
-/*
---------------------------------------------------
-ТЕКУЩИЕ ПАРАМЕТРЫ
---------------------------------------------------
-*/
-
 let currentZoneId = null;
 let currentUserId = null;
 
+let selectedPhotoBase64 = null;
 
-/*
---------------------------------------------------
-ОПРЕДЕЛЯЕМ ЗОНУ И ПОЛЬЗОВАТЕЛЯ
---------------------------------------------------
-*/
+
+/* --------------------------------------------------
+   ОПРЕДЕЛЕНИЕ ЗОНЫ И ПОЛЬЗОВАТЕЛЯ
+-------------------------------------------------- */
 
 function detectContext() {
-
-    /*
-    Вариант 1.
-    Если страница открыта через MAX Mini App,
-    получаем start_param и пользователя.
-    */
 
     const webApp = window.WebApp;
 
@@ -135,14 +172,6 @@ function detectContext() {
     }
 
 
-    /*
-    Вариант 2.
-    Если страницу открыли обычной ссылкой,
-    зона может передаваться так:
-
-    ?zone=zone_test_01
-    */
-
     if (!currentZoneId) {
 
         const params =
@@ -155,12 +184,6 @@ function detectContext() {
     }
 
 
-    /*
-    Пока у нас одна тестовая зона.
-    Если параметр не получен,
-    используем её.
-    */
-
     if (!currentZoneId) {
         currentZoneId =
             "zone_test_01";
@@ -168,11 +191,9 @@ function detectContext() {
 }
 
 
-/*
---------------------------------------------------
-ПОКАЗ КАРТОЧКИ ЗОНЫ
---------------------------------------------------
-*/
+/* --------------------------------------------------
+   ПОКАЗ КАРТОЧКИ ЗОНЫ
+-------------------------------------------------- */
 
 function showZone(zone) {
 
@@ -200,11 +221,9 @@ function showZone(zone) {
 }
 
 
-/*
---------------------------------------------------
-ЧТЕНИЕ ДАННЫХ ИЗ YDB ЧЕРЕЗ CLOUD FUNCTION
---------------------------------------------------
-*/
+/* --------------------------------------------------
+   ЗАГРУЗКА ДАННЫХ ЗОНЫ
+-------------------------------------------------- */
 
 async function loadZone() {
 
@@ -253,8 +272,7 @@ async function loadZone() {
 
 
         /*
-        Пока сотрудник только один:
-        MAX user_id = 58699171
+        Пока служебный пользователь один
         */
 
         if (
@@ -284,11 +302,82 @@ async function loadZone() {
 }
 
 
-/*
---------------------------------------------------
-ФИКСАЦИЯ УБОРКИ
---------------------------------------------------
-*/
+/* --------------------------------------------------
+   ПОЛУЧЕНИЕ ФОТО С КАМЕРЫ
+-------------------------------------------------- */
+
+document.getElementById(
+    "photo-input"
+).addEventListener(
+    "change",
+    function(event) {
+
+        const file =
+            event.target.files[0];
+
+        if (!file) {
+
+            selectedPhotoBase64 = null;
+
+            document.getElementById(
+                "photo-status"
+            ).innerText = "";
+
+            return;
+        }
+
+
+        const reader =
+            new FileReader();
+
+
+        reader.onload =
+            function(loadEvent) {
+
+                selectedPhotoBase64 =
+                    loadEvent.target.result;
+
+                const preview =
+                    document.getElementById(
+                        "photo-preview"
+                    );
+
+                preview.src =
+                    selectedPhotoBase64;
+
+                preview.style.display =
+                    "block";
+
+
+                document.getElementById(
+                    "photo-status"
+                ).innerText =
+                    "Фото сделано";
+            };
+
+
+        reader.onerror =
+            function() {
+
+                selectedPhotoBase64 = null;
+
+                document.getElementById(
+                    "photo-status"
+                ).innerText =
+                    "Не удалось получить фото";
+            };
+
+
+        reader.readAsDataURL(
+            file
+        );
+    }
+);
+
+
+/* --------------------------------------------------
+   ФИКСАЦИЯ УБОРКИ
+-------------------------------------------------- */
 
 async function cleaningDone() {
 
@@ -297,12 +386,27 @@ async function cleaningDone() {
             "result"
         );
 
+    const cleanButton =
+        document.getElementById(
+            "clean-button"
+        );
+
+
+    if (!selectedPhotoBase64) {
+
+        result.innerText =
+            "Сначала сделайте фото";
+
+        return;
+    }
+
+
     result.innerText =
         "Фиксирую уборку...";
 
-    document.getElementById(
-        "clean-button"
-    ).disabled = true;
+    cleanButton.disabled =
+        true;
+
 
     try {
 
@@ -318,18 +422,26 @@ async function cleaningDone() {
                     },
 
                     body: JSON.stringify({
+
                         action:
                             "cleaning_done",
+
                         zone_id:
                             currentZoneId,
+
                         employee_id:
-                            currentUserId
+                            currentUserId,
+
+                        photo:
+                            selectedPhotoBase64
                     })
                 }
             );
 
+
         const data =
             await response.json();
+
 
         if (!response.ok) {
 
@@ -339,6 +451,7 @@ async function cleaningDone() {
                 response.status
             );
         }
+
 
         if (
             data.status !== "ok"
@@ -351,12 +464,8 @@ async function cleaningDone() {
         }
 
 
-        /*
-        Показываем обновлённые данные,
-        которые вернула YDB.
-        */
-
         if (data.zone) {
+
             showZone(
                 data.zone
             );
@@ -372,6 +481,36 @@ async function cleaningDone() {
                     : ""
             );
 
+
+        /*
+        После успешной фиксации
+        очищаем фотографию
+        */
+
+        selectedPhotoBase64 =
+            null;
+
+
+        document.getElementById(
+            "photo-input"
+        ).value = "";
+
+
+        const preview =
+            document.getElementById(
+                "photo-preview"
+            );
+
+        preview.src = "";
+        preview.style.display =
+            "none";
+
+
+        document.getElementById(
+            "photo-status"
+        ).innerText = "";
+
+
     } catch (error) {
 
         console.error(error);
@@ -382,18 +521,15 @@ async function cleaningDone() {
 
     } finally {
 
-        document.getElementById(
-            "clean-button"
-        ).disabled = false;
+        cleanButton.disabled =
+            false;
     }
 }
 
 
-/*
---------------------------------------------------
-КНОПКА
---------------------------------------------------
-*/
+/* --------------------------------------------------
+   КНОПКА УБОРКИ
+-------------------------------------------------- */
 
 document.getElementById(
     "clean-button"
@@ -401,11 +537,9 @@ document.getElementById(
     cleaningDone;
 
 
-/*
---------------------------------------------------
-СТАРТ
---------------------------------------------------
-*/
+/* --------------------------------------------------
+   СТАРТ
+-------------------------------------------------- */
 
 detectContext();
 loadZone();
