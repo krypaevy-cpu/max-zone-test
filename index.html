@@ -4,15 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Грин Ривер</title>
-
-    <script src="https://st.max.ru/js/max-web-app.js"></script>
+    <title>Грин Ривер — цифровой паспорт зоны</title>
 
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
             font-size: 18px;
+            line-height: 1.45;
+        }
+
+        h2 {
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            font-size: 23px;
         }
 
         button {
@@ -21,21 +29,30 @@
             margin-top: 10px;
         }
 
-        #last-cleaning-photo {
+        #last-cleaning-photo,
+        #photo-preview {
             display: block;
             max-width: 100%;
             height: auto;
-            margin-top: 10px;
+            margin-top: 12px;
+            border-radius: 8px;
         }
 
         #photo-preview {
             display: none;
-            margin-top: 15px;
-            max-width: 100%;
-            height: auto;
+        }
+
+        #employee-panel {
+            display: none;
+            margin-top: 28px;
         }
 
         #result {
+            margin-top: 15px;
+            white-space: pre-wrap;
+        }
+
+        #error {
             margin-top: 15px;
             white-space: pre-wrap;
         }
@@ -51,7 +68,7 @@
 </div>
 
 
-<div id="employee-panel" style="display:none; margin-top:25px;">
+<div id="employee-panel">
 
     <hr>
 
@@ -76,10 +93,8 @@
 
     <img
         id="photo-preview"
-        alt="Фото уборки"
+        alt="Фото после уборки"
     >
-
-    <br>
 
     <button
         id="clean-button"
@@ -93,6 +108,9 @@
 </div>
 
 
+<div id="error"></div>
+
+
 <script>
 
 /* ==================================================
@@ -102,25 +120,107 @@
 const API_URL =
     "https://functions.yandexcloud.net/d4e0v5uck2oc0924pbeg";
 
-const EMPLOYEE_ID = 58699171;
+const DEFAULT_ZONE_ID =
+    "zone_test_01";
 
-/*
-Фото специально уменьшаем перед отправкой.
-Это необходимо, чтобы не получить HTTP 413.
-*/
+const MAX_PHOTO_SIZE =
+    800;
 
-const MAX_PHOTO_SIZE = 800;
-const JPEG_QUALITY = 0.45;
+const JPEG_QUALITY =
+    0.45;
 
 
 /* ==================================================
-   ТЕКУЩИЕ ДАННЫЕ
+   ТЕКУЩЕЕ СОСТОЯНИЕ
 ================================================== */
 
-let currentZoneId = null;
-let currentUserId = null;
+let currentZoneId =
+    null;
 
-let photoBase64 = null;
+let photoBase64 =
+    null;
+
+
+/* ==================================================
+   ТЕСТОВЫЙ СЛУЖЕБНЫЙ РЕЖИМ
+================================================== */
+
+/*
+Обычная NFC-метка содержит:
+
+?zone=zone_test_01
+
+
+Чтобы один раз включить служебный режим
+на телефоне уборщицы, открываем:
+
+?zone=zone_test_01&employee=1
+
+
+После этого браузер запомнит,
+что это телефон сотрудника.
+
+
+Чтобы отключить служебный режим:
+
+?zone=zone_test_01&logout=1
+*/
+
+function setupEmployeeMode() {
+
+    const params =
+        new URLSearchParams(
+            window.location.search
+        );
+
+
+    if (
+        params.get("employee") === "1"
+    ) {
+
+        localStorage.setItem(
+            "green_river_employee",
+            "1"
+        );
+    }
+
+
+    if (
+        params.get("logout") === "1"
+    ) {
+
+        localStorage.removeItem(
+            "green_river_employee"
+        );
+    }
+}
+
+
+function isEmployee() {
+
+    return (
+        localStorage.getItem(
+            "green_river_employee"
+        ) === "1"
+    );
+}
+
+
+/* ==================================================
+   ОПРЕДЕЛЕНИЕ ЗОНЫ
+================================================== */
+
+function detectZone() {
+
+    const params =
+        new URLSearchParams(
+            window.location.search
+        );
+
+    currentZoneId =
+        params.get("zone") ||
+        DEFAULT_ZONE_ID;
+}
 
 
 /* ==================================================
@@ -130,22 +230,22 @@ let photoBase64 = null;
 function showZone(zone) {
 
     const lastCleaning =
-        zone.last_cleaning || "Нет данных";
+        zone.last_cleaning ||
+        "Нет данных";
 
     const status =
-        zone.status || "Нет данных";
+        zone.status ||
+        "Нет данных";
 
-    let photoHtml = "";
+    let photoHtml =
+        "";
 
-    /*
-    Если API вернул ссылку на фотографию,
-    показываем фотографию прямо в карточке зоны.
-    */
 
     if (zone.photo_url) {
 
         photoHtml =
             "<p><b>Фото последней уборки:</b></p>" +
+
             "<img " +
             "id=\"last-cleaning-photo\" " +
             "src=\"" +
@@ -155,7 +255,11 @@ function showZone(zone) {
             ">";
     }
 
-    document.getElementById("content").innerHTML =
+
+    document.getElementById(
+        "content"
+    ).innerHTML =
+
         "<h3>" +
         zone.name +
         "</h3>" +
@@ -178,43 +282,38 @@ function showZone(zone) {
 
 async function loadZone() {
 
-    const webApp = window.WebApp;
-
-    currentZoneId =
-        webApp &&
-        webApp.initDataUnsafe &&
-        webApp.initDataUnsafe.start_param;
-
-    const user =
-        webApp &&
-        webApp.initDataUnsafe &&
-        webApp.initDataUnsafe.user;
-
-    if (user) {
-        currentUserId = Number(user.id);
-    }
-
-
-    /*
-    Режим для проверки из обычного браузера.
-    Если MAX не передал start_param,
-    используем тестовую зону.
-    */
-
-    if (!currentZoneId) {
-        currentZoneId = "zone_test_01";
-    }
+    document.getElementById(
+        "error"
+    ).innerText =
+        "";
 
 
     try {
 
-        const response = await fetch(
-            API_URL,
-            {
-                method: "GET",
-                cache: "no-store"
-            }
-        );
+        const response =
+            await fetch(
+
+                API_URL +
+
+                "?zone=" +
+
+                encodeURIComponent(
+                    currentZoneId
+                ) +
+
+                "&ts=" +
+
+                Date.now(),
+
+                {
+                    method:
+                        "GET",
+
+                    cache:
+                        "no-store"
+                }
+            );
+
 
         if (!response.ok) {
 
@@ -247,26 +346,38 @@ async function loadZone() {
 
 
         /*
-        Служебный режим показываем
-        только сотруднику.
+        Служебные кнопки показываем
+        только на телефоне сотрудника.
         */
 
-        if (currentUserId === EMPLOYEE_ID) {
+        if (
+            isEmployee()
+        ) {
 
             document.getElementById(
                 "employee-panel"
-            ).style.display = "block";
+            ).style.display =
+                "block";
         }
 
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
+
 
         document.getElementById(
             "content"
         ).innerText =
-            "Ошибка загрузки данных:\n" +
+            "Не удалось загрузить данные";
+
+
+        document.getElementById(
+            "error"
+        ).innerText =
+            "ОШИБКА:\n" +
             error.message;
     }
 }
@@ -278,12 +389,13 @@ async function loadZone() {
 
 document.getElementById(
     "photo-button"
-).onclick = function () {
+).onclick =
+    function () {
 
-    document.getElementById(
-        "photo-input"
-    ).click();
-};
+        document.getElementById(
+            "photo-input"
+        ).click();
+    };
 
 
 /* ==================================================
@@ -293,11 +405,14 @@ document.getElementById(
 document.getElementById(
     "photo-input"
 ).addEventListener(
+
     "change",
+
     function (event) {
 
         const file =
             event.target.files[0];
+
 
         if (!file) {
             return;
@@ -326,23 +441,30 @@ document.getElementById(
 
 
                         /*
-                        Уменьшаем фотографию,
-                        сохраняя пропорции.
+                        Уменьшаем фотографию
+                        перед отправкой.
                         */
 
                         if (
                             width >
                             MAX_PHOTO_SIZE ||
+
                             height >
                             MAX_PHOTO_SIZE
                         ) {
 
-                            if (width > height) {
+                            if (
+                                width >
+                                height
+                            ) {
 
                                 height =
                                     Math.round(
+
                                         height *
+
                                         MAX_PHOTO_SIZE /
+
                                         width
                                     );
 
@@ -353,8 +475,11 @@ document.getElementById(
 
                                 width =
                                     Math.round(
+
                                         width *
+
                                         MAX_PHOTO_SIZE /
+
                                         height
                                     );
 
@@ -368,6 +493,7 @@ document.getElementById(
                             document.createElement(
                                 "canvas"
                             );
+
 
                         canvas.width =
                             width;
@@ -391,10 +517,6 @@ document.getElementById(
                         );
 
 
-                        /*
-                        Получаем уменьшенный JPEG.
-                        */
-
                         const dataUrl =
                             canvas.toDataURL(
                                 "image/jpeg",
@@ -402,18 +524,12 @@ document.getElementById(
                             );
 
 
-                        /*
-                        Для API оставляем только
-                        сам Base64 без заголовка
-                        data:image/jpeg;base64,...
-                        */
-
                         photoBase64 =
                             dataUrl.split(",")[1];
 
 
                         /*
-                        Показываем фотографию.
+                        Показываем сделанное фото.
                         */
 
                         const preview =
@@ -421,8 +537,10 @@ document.getElementById(
                                 "photo-preview"
                             );
 
+
                         preview.src =
                             dataUrl;
+
 
                         preview.style.display =
                             "block";
@@ -435,8 +553,8 @@ document.getElementById(
 
 
                         /*
-                        Только после фотографии
-                        появляется кнопка фиксации.
+                        После фото появляется
+                        кнопка фиксации уборки.
                         */
 
                         document.getElementById(
@@ -505,19 +623,15 @@ async function cleaningDone() {
     }
 
 
-    result.innerText =
-        "Фиксирую уборку...";
-
-
-    /*
-    Блокируем кнопку,
-    чтобы случайно не создать две записи.
-    */
-
     const cleanButton =
         document.getElementById(
             "clean-button"
         );
+
+
+    result.innerText =
+        "Фиксирую уборку...";
+
 
     cleanButton.disabled =
         true;
@@ -525,37 +639,37 @@ async function cleaningDone() {
 
     try {
 
-        const requestBody = {
-
-            action:
-                "cleaning_done",
-
-            zone_id:
-                currentZoneId,
-
-            employee_id:
-                currentUserId ||
-                EMPLOYEE_ID,
-
-            photo:
-                photoBase64
-        };
-
-
         const response =
             await fetch(
+
                 API_URL,
+
                 {
-                    method: "POST",
+                    method:
+                        "POST",
 
                     headers: {
+
                         "Content-Type":
                             "application/json"
                     },
 
                     body:
                         JSON.stringify(
-                            requestBody
+                            {
+
+                                action:
+                                    "cleaning_done",
+
+                                zone_id:
+                                    currentZoneId,
+
+                                employee_id:
+                                    "test_employee",
+
+                                photo:
+                                    photoBase64
+                            }
                         )
                 }
             );
@@ -566,10 +680,15 @@ async function cleaningDone() {
             const errorText =
                 await response.text();
 
+
             throw new Error(
+
                 "API HTTP " +
+
                 response.status +
+
                 "\n" +
+
                 errorText
             );
         }
@@ -579,10 +698,14 @@ async function cleaningDone() {
             await response.json();
 
 
-        if (data.status !== "ok") {
+        if (
+            data.status !== "ok"
+        ) {
 
             throw new Error(
+
                 data.message ||
+
                 "Неизвестная ошибка API"
             );
         }
@@ -593,13 +716,12 @@ async function cleaningDone() {
 
 
         /*
-        API возвращает обновлённую зону,
-        включая photo_url.
-        Поэтому новая фотография сразу
-        появится в карточке зоны.
+        Сразу обновляем карточку.
         */
 
-        if (data.zone) {
+        if (
+            data.zone
+        ) {
 
             showZone(
                 data.zone
@@ -608,8 +730,7 @@ async function cleaningDone() {
 
 
         /*
-        После успешной записи
-        очищаем фотографию.
+        Очищаем сделанное фото.
         */
 
         photoBase64 =
@@ -622,9 +743,17 @@ async function cleaningDone() {
             "";
 
 
-        document.getElementById(
-            "photo-preview"
-        ).style.display =
+        const preview =
+            document.getElementById(
+                "photo-preview"
+            );
+
+
+        preview.src =
+            "";
+
+
+        preview.style.display =
             "none";
 
 
@@ -637,13 +766,17 @@ async function cleaningDone() {
         cleanButton.style.display =
             "none";
 
+
         cleanButton.disabled =
             false;
 
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
+
 
         result.innerText =
             "ОШИБКА:\n" +
@@ -657,7 +790,7 @@ async function cleaningDone() {
 
 
 /* ==================================================
-   КНОПКА "УБОРКА ВЫПОЛНЕНА"
+   КНОПКА ФИКСАЦИИ
 ================================================== */
 
 document.getElementById(
@@ -669,6 +802,10 @@ document.getElementById(
 /* ==================================================
    ЗАПУСК
 ================================================== */
+
+setupEmployeeMode();
+
+detectZone();
 
 loadZone();
 
