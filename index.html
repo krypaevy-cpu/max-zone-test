@@ -134,6 +134,8 @@
 const API_URL =
     "https://functions.yandexcloud.net/d4e0v5uck2oc0924pbeg";
 
+const MAX_PHOTO_SIZE = 1280;
+const JPEG_QUALITY = 0.70;
 
 let currentZoneId = null;
 let currentUserId = null;
@@ -171,7 +173,6 @@ function detectContext() {
         }
     }
 
-
     if (!currentZoneId) {
 
         const params =
@@ -182,7 +183,6 @@ function detectContext() {
         currentZoneId =
             params.get("zone");
     }
-
 
     if (!currentZoneId) {
         currentZoneId =
@@ -270,11 +270,6 @@ async function loadZone() {
             data.zone
         );
 
-
-        /*
-        Пока служебный пользователь один
-        */
-
         if (
             currentUserId === 58699171
         ) {
@@ -303,6 +298,131 @@ async function loadZone() {
 
 
 /* --------------------------------------------------
+   СЖАТИЕ ФОТО
+-------------------------------------------------- */
+
+function compressPhoto(file) {
+
+    return new Promise(
+        function(resolve, reject) {
+
+            const reader =
+                new FileReader();
+
+            reader.onload =
+                function(readerEvent) {
+
+                    const image =
+                        new Image();
+
+                    image.onload =
+                        function() {
+
+                            let width =
+                                image.width;
+
+                            let height =
+                                image.height;
+
+                            if (
+                                width > MAX_PHOTO_SIZE ||
+                                height > MAX_PHOTO_SIZE
+                            ) {
+
+                                if (width >= height) {
+
+                                    height =
+                                        Math.round(
+                                            height *
+                                            MAX_PHOTO_SIZE /
+                                            width
+                                        );
+
+                                    width =
+                                        MAX_PHOTO_SIZE;
+
+                                } else {
+
+                                    width =
+                                        Math.round(
+                                            width *
+                                            MAX_PHOTO_SIZE /
+                                            height
+                                        );
+
+                                    height =
+                                        MAX_PHOTO_SIZE;
+                                }
+                            }
+
+                            const canvas =
+                                document.createElement(
+                                    "canvas"
+                                );
+
+                            canvas.width =
+                                width;
+
+                            canvas.height =
+                                height;
+
+                            const context =
+                                canvas.getContext(
+                                    "2d"
+                                );
+
+                            context.drawImage(
+                                image,
+                                0,
+                                0,
+                                width,
+                                height
+                            );
+
+                            const compressed =
+                                canvas.toDataURL(
+                                    "image/jpeg",
+                                    JPEG_QUALITY
+                                );
+
+                            resolve(
+                                compressed
+                            );
+                        };
+
+                    image.onerror =
+                        function() {
+
+                            reject(
+                                new Error(
+                                    "Не удалось обработать фото"
+                                )
+                            );
+                        };
+
+                    image.src =
+                        readerEvent.target.result;
+                };
+
+            reader.onerror =
+                function() {
+
+                    reject(
+                        new Error(
+                            "Не удалось прочитать фото"
+                        )
+                    );
+                };
+
+            reader.readAsDataURL(
+                file
+            );
+        }
+    );
+}
+
+
+/* --------------------------------------------------
    ПОЛУЧЕНИЕ ФОТО С КАМЕРЫ
 -------------------------------------------------- */
 
@@ -310,67 +430,66 @@ document.getElementById(
     "photo-input"
 ).addEventListener(
     "change",
-    function(event) {
+    async function(event) {
 
         const file =
             event.target.files[0];
 
-        if (!file) {
-
-            selectedPhotoBase64 = null;
-
+        const photoStatus =
             document.getElementById(
                 "photo-status"
-            ).innerText = "";
+            );
+
+        const preview =
+            document.getElementById(
+                "photo-preview"
+            );
+
+        if (!file) {
+
+            selectedPhotoBase64 =
+                null;
+
+            photoStatus.innerText =
+                "";
+
+            preview.style.display =
+                "none";
 
             return;
         }
 
+        photoStatus.innerText =
+            "Обрабатываю фото...";
 
-        const reader =
-            new FileReader();
+        try {
 
+            selectedPhotoBase64 =
+                await compressPhoto(
+                    file
+                );
 
-        reader.onload =
-            function(loadEvent) {
+            preview.src =
+                selectedPhotoBase64;
 
-                selectedPhotoBase64 =
-                    loadEvent.target.result;
+            preview.style.display =
+                "block";
 
-                const preview =
-                    document.getElementById(
-                        "photo-preview"
-                    );
+            photoStatus.innerText =
+                "Фото сделано";
 
-                preview.src =
-                    selectedPhotoBase64;
+        } catch (error) {
 
-                preview.style.display =
-                    "block";
+            console.error(
+                error
+            );
 
+            selectedPhotoBase64 =
+                null;
 
-                document.getElementById(
-                    "photo-status"
-                ).innerText =
-                    "Фото сделано";
-            };
-
-
-        reader.onerror =
-            function() {
-
-                selectedPhotoBase64 = null;
-
-                document.getElementById(
-                    "photo-status"
-                ).innerText =
-                    "Не удалось получить фото";
-            };
-
-
-        reader.readAsDataURL(
-            file
-        );
+            photoStatus.innerText =
+                "Не удалось обработать фото";
+        }
     }
 );
 
@@ -391,7 +510,6 @@ async function cleaningDone() {
             "clean-button"
         );
 
-
     if (!selectedPhotoBase64) {
 
         result.innerText =
@@ -400,13 +518,11 @@ async function cleaningDone() {
         return;
     }
 
-
     result.innerText =
         "Фиксирую уборку...";
 
     cleanButton.disabled =
         true;
-
 
     try {
 
@@ -438,10 +554,8 @@ async function cleaningDone() {
                 }
             );
 
-
         const data =
             await response.json();
-
 
         if (!response.ok) {
 
@@ -451,7 +565,6 @@ async function cleaningDone() {
                 response.status
             );
         }
-
 
         if (
             data.status !== "ok"
@@ -463,14 +576,12 @@ async function cleaningDone() {
             );
         }
 
-
         if (data.zone) {
 
             showZone(
                 data.zone
             );
         }
-
 
         result.innerText =
             "Уборка зафиксирована\n" +
@@ -481,20 +592,12 @@ async function cleaningDone() {
                     : ""
             );
 
-
-        /*
-        После успешной фиксации
-        очищаем фотографию
-        */
-
         selectedPhotoBase64 =
             null;
-
 
         document.getElementById(
             "photo-input"
         ).value = "";
-
 
         const preview =
             document.getElementById(
@@ -502,18 +605,19 @@ async function cleaningDone() {
             );
 
         preview.src = "";
+
         preview.style.display =
             "none";
-
 
         document.getElementById(
             "photo-status"
         ).innerText = "";
 
-
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
 
         result.innerText =
             "ОШИБКА:\n" +
