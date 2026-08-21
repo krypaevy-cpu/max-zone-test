@@ -12,14 +12,70 @@
             margin: 20px;
             font-size: 18px;
             line-height: 1.45;
+            color: #222;
         }
 
         h2 {
             font-size: 28px;
+            margin-bottom: 18px;
         }
 
         h3 {
-            font-size: 23px;
+            font-size: 22px;
+            margin-top: 18px;
+            margin-bottom: 10px;
+        }
+
+        h4 {
+            margin-bottom: 8px;
+        }
+
+        button {
+            font-size: 17px;
+            padding: 12px 18px;
+            margin-top: 10px;
+            margin-right: 6px;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 14px;
+            background: #fff;
+        }
+
+        .warning {
+            border-left: 5px solid #c77a00;
+        }
+
+        .danger {
+            border-left: 5px solid #b92c2c;
+        }
+
+        .ok {
+            border-left: 5px solid #2f7d4a;
+        }
+
+        .metric {
+            margin: 7px 0;
+        }
+
+        .metric b {
+            display: inline-block;
+            min-width: 155px;
+        }
+
+        .role {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 16px;
+        }
+
+        .big-status {
+            font-size: 22px;
+            font-weight: bold;
+            margin: 10px 0;
         }
 
         #last-cleaning-photo,
@@ -27,19 +83,11 @@
             display: block;
             max-width: 100%;
             height: auto;
-            margin-top: 15px;
+            margin-top: 12px;
             border-radius: 8px;
         }
 
         #photo-preview {
-            display: none;
-        }
-
-        #employee-status {
-            margin-top: 25px;
-            padding: 18px;
-            border: 1px solid #ccc;
-            border-radius: 10px;
             display: none;
         }
 
@@ -50,14 +98,26 @@
         #camera-button {
             display: none;
             width: 100%;
-            font-size: 22px;
-            padding: 18px;
-            margin-top: 18px;
+            font-size: 20px;
+            padding: 16px;
+        }
+
+        #employee-status {
+            margin-top: 20px;
         }
 
         #error {
             margin-top: 15px;
             white-space: pre-wrap;
+        }
+
+        .actions {
+            margin-top: 18px;
+        }
+
+        .small {
+            font-size: 14px;
+            color: #666;
         }
     </style>
 </head>
@@ -65,6 +125,8 @@
 <body>
 
 <h2>Цифровой паспорт зоны</h2>
+
+<div id="role-info"></div>
 
 <div id="content">
     Загрузка...
@@ -80,8 +142,12 @@
 >
 
 <button id="camera-button">
-    Сделать фото
+    Сделать фото результата
 </button>
+
+<div id="manager-panel"></div>
+
+<div id="cleaning-manager-panel"></div>
 
 <img
     id="photo-preview"
@@ -119,45 +185,77 @@ const JPEG_QUALITY =
 
 let currentZoneId = null;
 
-let photoBase64 = null;
+let currentRole = "resident";
 
-let employeeMode = false;
+let photoBase64 = null;
 
 
 /* ==================================================
-   СЛУЖЕБНЫЙ РЕЖИМ
+   РОЛИ
 ================================================== */
 
-function setupEmployeeMode() {
+/*
+Временная тестовая схема.
+
+Один раз открыть:
+
+?zone=zone_test_01&role=cleaner
+
+или
+
+?zone=zone_test_01&role=manager
+
+или
+
+?zone=zone_test_01&role=cleaning_manager
+
+
+После этого браузер запоминает роль.
+
+Житель — роль по умолчанию.
+
+Сброс роли:
+
+?zone=zone_test_01&role=resident
+*/
+
+function setupRole() {
 
     const params =
         new URLSearchParams(
             window.location.search
         );
 
+    const roleFromUrl =
+        params.get("role");
+
+    const allowedRoles = [
+        "resident",
+        "cleaner",
+        "manager",
+        "cleaning_manager"
+    ];
+
+
     if (
-        params.get("employee") === "1"
+        roleFromUrl &&
+        allowedRoles.includes(
+            roleFromUrl
+        )
     ) {
 
         localStorage.setItem(
-            "green_river_employee",
-            "1"
+            "green_river_role",
+            roleFromUrl
         );
     }
 
-    if (
-        params.get("logout") === "1"
-    ) {
 
-        localStorage.removeItem(
-            "green_river_employee"
-        );
-    }
-
-    employeeMode =
+    currentRole =
         localStorage.getItem(
-            "green_river_employee"
-        ) === "1";
+            "green_river_role"
+        ) ||
+        "resident";
 }
 
 
@@ -179,7 +277,40 @@ function detectZone() {
 
 
 /* ==================================================
-   КАРТОЧКА ЗОНЫ
+   НАЗВАНИЕ РОЛИ
+================================================== */
+
+function showRole() {
+
+    const names = {
+
+        resident:
+            "Житель",
+
+        cleaner:
+            "Сотрудник клининга",
+
+        manager:
+            "Управляющий МКД",
+
+        cleaning_manager:
+            "Руководитель подрядчика по клинингу"
+    };
+
+
+    document.getElementById(
+        "role-info"
+    ).innerHTML =
+
+        "<div class=\"role\">" +
+        "Режим: <b>" +
+        names[currentRole] +
+        "</b></div>";
+}
+
+
+/* ==================================================
+   БАЗОВАЯ КАРТОЧКА ЗОНЫ
 ================================================== */
 
 function showZone(zone) {
@@ -194,10 +325,15 @@ function showZone(zone) {
 
     let photoHtml = "";
 
+
     if (zone.photo_url) {
 
         photoHtml =
             "<p><b>Фото последней уборки:</b></p>" +
+
+            "<a href=\"" +
+            zone.photo_url +
+            "\" target=\"_blank\">" +
 
             "<img " +
             "id=\"last-cleaning-photo\" " +
@@ -205,12 +341,17 @@ function showZone(zone) {
             zone.photo_url +
             "\" " +
             "alt=\"Фото последней уборки\"" +
-            ">";
+            ">" +
+
+            "</a>";
     }
+
 
     document.getElementById(
         "content"
     ).innerHTML =
+
+        "<div class=\"card\">" +
 
         "<h3>" +
         zone.name +
@@ -224,12 +365,195 @@ function showZone(zone) {
         status +
         "</p>" +
 
-        photoHtml;
+        photoHtml +
+
+        "</div>";
 }
 
 
 /* ==================================================
-   ПОЛУЧЕНИЕ КАРТОЧКИ
+   КАРТОЧКА УПРАВЛЯЮЩЕГО
+================================================== */
+
+function showManagerPanel(zone) {
+
+    document.getElementById(
+        "manager-panel"
+    ).innerHTML =
+
+        "<div class=\"card warning\">" +
+
+        "<h3>Контроль выполнения</h3>" +
+
+        "<div class=\"metric\">" +
+        "<b>Плановая уборка:</b> 10:00" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Начало:</b> 10:17" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Завершение:</b> " +
+        (zone.last_cleaning || "—") +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Отклонение:</b> +17 мин" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Исполнитель:</b> Иванова Н." +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Длительность:</b> 14 мин" +
+        "</div>" +
+
+        "</div>" +
+
+
+        "<div class=\"card\">" +
+
+        "<h3>Статистика зоны за 7 дней</h3>" +
+
+        "<div class=\"metric\">" +
+        "<b>По плану:</b> 7" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Выполнено:</b> 7" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>В срок:</b> 5" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>С нарушением:</b> 2" +
+        "</div>" +
+
+        "</div>" +
+
+
+        "<div class=\"actions\">" +
+
+        "<button>" +
+        "Повторная уборка" +
+        "</button>" +
+
+        "<button>" +
+        "Зафиксировать нарушение" +
+        "</button>" +
+
+        "<button>" +
+        "Дашборд дома" +
+        "</button>" +
+
+        "</div>";
+}
+
+
+/* ==================================================
+   КАРТОЧКА РУКОВОДИТЕЛЯ КЛИНИНГА
+================================================== */
+
+function showCleaningManagerPanel(zone) {
+
+    document.getElementById(
+        "cleaning-manager-panel"
+    ).innerHTML =
+
+        "<div class=\"card warning\">" +
+
+        "<h3>Исполнение задания</h3>" +
+
+        "<div class=\"metric\">" +
+        "<b>Исполнитель:</b> Иванова Н." +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>План:</b> 10:00–10:15" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Факт:</b> 10:17–10:31" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Отклонение:</b> +17 мин" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Длительность:</b> 14 мин" +
+        "</div>" +
+
+        "</div>" +
+
+
+        "<div class=\"card\">" +
+
+        "<h3>Маршрут сотрудника</h3>" +
+
+        "<div class=\"metric\">" +
+        "<b>Текущая зона:</b> " +
+        zone.name +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Следующая зона:</b> Подъезд 2, этаж 2" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>План следующей:</b> 10:30" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>Отставание:</b> 12 мин" +
+        "</div>" +
+
+        "</div>" +
+
+
+        "<div class=\"card\">" +
+
+        "<h3>Исполнитель за 30 дней</h3>" +
+
+        "<div class=\"metric\">" +
+        "<b>Заданий:</b> 42" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>В срок:</b> 38" +
+        "</div>" +
+
+        "<div class=\"metric\">" +
+        "<b>С нарушением:</b> 4" +
+        "</div>" +
+
+        "</div>" +
+
+
+        "<div class=\"actions\">" +
+
+        "<button>" +
+        "Назначить повторную уборку" +
+        "</button>" +
+
+        "<button>" +
+        "Карточка сотрудника" +
+        "</button>" +
+
+        "<button>" +
+        "Дашборд клининга" +
+        "</button>" +
+
+        "</div>";
+}
+
+
+/* ==================================================
+   ЗАГРУЗКА ЗОНЫ
 ================================================== */
 
 async function loadZone() {
@@ -250,13 +574,18 @@ async function loadZone() {
                 Date.now(),
 
                 {
-                    method: "GET",
-                    cache: "no-store"
+                    method:
+                        "GET",
+
+                    cache:
+                        "no-store"
                 }
             );
 
+
         const data =
             await response.json();
+
 
         if (
             !response.ok ||
@@ -269,9 +598,32 @@ async function loadZone() {
             );
         }
 
+
         showZone(
             data.zone
         );
+
+
+        if (
+            currentRole === "manager"
+        ) {
+
+            showManagerPanel(
+                data.zone
+            );
+        }
+
+
+        if (
+            currentRole ===
+            "cleaning_manager"
+        ) {
+
+            showCleaningManagerPanel(
+                data.zone
+            );
+        }
+
 
     } catch (error) {
 
@@ -283,39 +635,43 @@ async function loadZone() {
 
 
 /* ==================================================
-   КАСАНИЕ NFC СОТРУДНИКОМ
+   КАСАНИЕ УБОРЩИЦЫ
 ================================================== */
 
-async function employeeTouch() {
+async function cleanerTouch() {
 
     const statusBox =
         document.getElementById(
             "employee-status"
         );
 
-    statusBox.style.display =
-        "block";
 
     statusBox.innerHTML =
-        "Определяю действие...";
+        "<div class=\"card\">" +
+        "Определяю действие..." +
+        "</div>";
 
 
     try {
 
         const response =
             await fetch(
+
                 API_URL,
+
                 {
                     method:
                         "POST",
 
                     headers: {
+
                         "Content-Type":
                             "application/json"
                     },
 
                     body:
                         JSON.stringify({
+
                             action:
                                 "touch",
 
@@ -340,43 +696,62 @@ async function employeeTouch() {
 
             throw new Error(
                 data.message ||
-                "Ошибка фиксации касания"
+                "Ошибка фиксации"
             );
         }
 
 
-        /* ------------------------------------------
-           ПЕРВОЕ КАСАНИЕ
-        ------------------------------------------ */
+        /*
+        ПЕРВОЕ КАСАНИЕ
+        */
 
         if (
-            data.result === "STARTED"
+            data.result ===
+            "STARTED"
         ) {
 
             statusBox.innerHTML =
-                "<h3>Уборка начата</h3>" +
-                "<p>Начало работ зафиксировано</p>";
+
+                "<div class=\"card ok\">" +
+
+                "<div class=\"big-status\">" +
+                "Уборка начата" +
+                "</div>" +
+
+                "<div>" +
+                "Начало работ зафиксировано" +
+                "</div>" +
+
+                "</div>";
 
             return;
         }
 
 
-        /* ------------------------------------------
-           ВТОРОЕ КАСАНИЕ
-        ------------------------------------------ */
+        /*
+        ВТОРОЕ КАСАНИЕ
+        */
 
         if (
-            data.result === "NEED_PHOTO"
+            data.result ===
+            "NEED_PHOTO"
         ) {
 
             statusBox.innerHTML =
-                "<h3>Завершение уборки</h3>" +
 
-                "<p>Уборка начата: " +
+                "<div class=\"card\">" +
+
+                "<div class=\"big-status\">" +
+                "Завершение уборки" +
+                "</div>" +
+
+                "<p>Начало: " +
                 data.started_at +
                 "</p>" +
 
-                "<p>Сделайте фото результата</p>";
+                "<p>Сделайте фото результата</p>" +
+
+                "</div>";
 
 
             document.getElementById(
@@ -403,7 +778,7 @@ async function employeeTouch() {
 
 
 /* ==================================================
-   ЗАПУСК КАМЕРЫ
+   КАМЕРА
 ================================================== */
 
 document.getElementById(
@@ -432,6 +807,7 @@ document.getElementById(
         const file =
             event.target.files[0];
 
+
         if (!file) {
             return;
         }
@@ -444,7 +820,9 @@ document.getElementById(
 
 
         statusBox.innerHTML =
-            "Обрабатываю фото...";
+            "<div class=\"card\">" +
+            "Обрабатываю фото..." +
+            "</div>";
 
 
         const reader =
@@ -565,12 +943,6 @@ document.getElementById(
                             "block";
 
 
-                        /*
-                        Фото уже сделано.
-                        Никакой кнопки подтверждения.
-                        Сразу завершаем уборку.
-                        */
-
                         finishCleaning();
                     };
 
@@ -606,7 +978,7 @@ document.getElementById(
 
 
 /* ==================================================
-   АВТОМАТИЧЕСКОЕ ЗАВЕРШЕНИЕ
+   ЗАВЕРШЕНИЕ УБОРКИ
 ================================================== */
 
 async function finishCleaning() {
@@ -618,7 +990,9 @@ async function finishCleaning() {
 
 
     statusBox.innerHTML =
-        "Фиксирую завершение уборки...";
+        "<div class=\"card\">" +
+        "Фиксирую завершение..." +
+        "</div>";
 
 
     document.getElementById(
@@ -631,18 +1005,22 @@ async function finishCleaning() {
 
         const response =
             await fetch(
+
                 API_URL,
+
                 {
                     method:
                         "POST",
 
                     headers: {
+
                         "Content-Type":
                             "application/json"
                     },
 
                     body:
                         JSON.stringify({
+
                             action:
                                 "finish_cleaning",
 
@@ -670,15 +1048,24 @@ async function finishCleaning() {
 
             throw new Error(
                 data.message ||
-                "Ошибка завершения уборки"
+                "Ошибка завершения"
             );
         }
 
 
         statusBox.innerHTML =
-            "<h3>Уборка завершена</h3>" +
 
-            "<p>Результат зафиксирован</p>";
+            "<div class=\"card ok\">" +
+
+            "<div class=\"big-status\">" +
+            "Уборка завершена" +
+            "</div>" +
+
+            "<div>" +
+            "Результат зафиксирован" +
+            "</div>" +
+
+            "</div>";
 
 
         if (
@@ -708,11 +1095,14 @@ async function finishCleaning() {
    ОШИБКИ
 ================================================== */
 
-function showError(message) {
+function showError(
+    message
+) {
 
     document.getElementById(
         "error"
     ).innerText =
+
         "ОШИБКА:\n" +
         message;
 }
@@ -724,24 +1114,28 @@ function showError(message) {
 
 async function start() {
 
-    setupEmployeeMode();
+    setupRole();
 
     detectZone();
+
+    showRole();
 
     await loadZone();
 
 
     /*
-    Если телефон авторизован как служебный,
-    само открытие страницы после NFC
-    считается касанием зоны.
+    Только уборщица автоматически
+    фиксирует касание.
+    Остальные роли просто получают
+    свой интерфейс.
     */
 
     if (
-        employeeMode
+        currentRole ===
+        "cleaner"
     ) {
 
-        await employeeTouch();
+        await cleanerTouch();
     }
 }
 
