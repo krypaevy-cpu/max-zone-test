@@ -26,10 +26,6 @@
             margin-bottom: 10px;
         }
 
-        h4 {
-            margin-bottom: 8px;
-        }
-
         button {
             font-size: 17px;
             padding: 12px 18px;
@@ -119,6 +115,15 @@
             font-size: 14px;
             color: #666;
         }
+
+        .checklist-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .checklist-item:last-child {
+            border-bottom: none;
+        }
     </style>
 </head>
 
@@ -149,6 +154,8 @@
 
 <div id="cleaning-manager-panel"></div>
 
+<div id="inspector-panel"></div>
+
 <img
     id="photo-preview"
     alt="Фото уборки"
@@ -166,11 +173,20 @@
 const API_URL =
     "https://functions.yandexcloud.net/d4e0v5uck2oc0924pbeg";
 
+const OSK_API_URL =
+    "https://functions.yandexcloud.net/d4erme2ve77oddv1r6cc";
+
 const DEFAULT_ZONE_ID =
     "zone_test_01";
 
 const EMPLOYEE_ID =
     58699171;
+
+const INSPECTOR_ID =
+    58699171;
+
+const TEST_OSK_TASK_ID =
+    "task_osk_01";
 
 const MAX_PHOTO_SIZE =
     800;
@@ -194,31 +210,6 @@ let photoBase64 = null;
    РОЛИ
 ================================================== */
 
-/*
-Временная тестовая схема.
-
-Один раз открыть:
-
-?zone=zone_test_01&role=cleaner
-
-или
-
-?zone=zone_test_01&role=manager
-
-или
-
-?zone=zone_test_01&role=cleaning_manager
-
-
-После этого браузер запоминает роль.
-
-Житель — роль по умолчанию.
-
-Сброс роли:
-
-?zone=zone_test_01&role=resident
-*/
-
 function setupRole() {
 
     const params =
@@ -233,15 +224,14 @@ function setupRole() {
         "resident",
         "cleaner",
         "manager",
-        "cleaning_manager"
+        "cleaning_manager",
+        "inspector"
     ];
 
 
     if (
         roleFromUrl &&
-        allowedRoles.includes(
-            roleFromUrl
-        )
+        allowedRoles.includes(roleFromUrl)
     ) {
 
         localStorage.setItem(
@@ -294,7 +284,10 @@ function showRole() {
             "Управляющий МКД",
 
         cleaning_manager:
-            "Руководитель подрядчика по клинингу"
+            "Руководитель подрядчика по клинингу",
+
+        inspector:
+            "Инженер строительного контроля"
     };
 
 
@@ -412,43 +405,22 @@ function showManagerPanel(zone) {
 
         "</div>" +
 
-
         "<div class=\"card\">" +
 
         "<h3>Статистика зоны за 7 дней</h3>" +
 
-        "<div class=\"metric\">" +
-        "<b>По плану:</b> 7" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>Выполнено:</b> 7" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>В срок:</b> 5" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>С нарушением:</b> 2" +
-        "</div>" +
+        "<div class=\"metric\"><b>По плану:</b> 7</div>" +
+        "<div class=\"metric\"><b>Выполнено:</b> 7</div>" +
+        "<div class=\"metric\"><b>В срок:</b> 5</div>" +
+        "<div class=\"metric\"><b>С нарушением:</b> 2</div>" +
 
         "</div>" +
-
 
         "<div class=\"actions\">" +
 
-        "<button>" +
-        "Повторная уборка" +
-        "</button>" +
-
-        "<button>" +
-        "Зафиксировать нарушение" +
-        "</button>" +
-
-        "<button>" +
-        "Дашборд дома" +
-        "</button>" +
+        "<button>Повторная уборка</button>" +
+        "<button>Зафиксировать нарушение</button>" +
+        "<button>Дашборд дома</button>" +
 
         "</div>";
 }
@@ -468,92 +440,50 @@ function showCleaningManagerPanel(zone) {
 
         "<h3>Исполнение задания</h3>" +
 
-        "<div class=\"metric\">" +
-        "<b>Исполнитель:</b> Иванова Н." +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>План:</b> 10:00–10:15" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>Факт:</b> 10:17–10:31" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>Отклонение:</b> +17 мин" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>Длительность:</b> 14 мин" +
-        "</div>" +
+        "<div class=\"metric\"><b>Исполнитель:</b> Иванова Н.</div>" +
+        "<div class=\"metric\"><b>План:</b> 10:00–10:15</div>" +
+        "<div class=\"metric\"><b>Факт:</b> 10:17–10:31</div>" +
+        "<div class=\"metric\"><b>Отклонение:</b> +17 мин</div>" +
+        "<div class=\"metric\"><b>Длительность:</b> 14 мин</div>" +
 
         "</div>" +
-
 
         "<div class=\"card\">" +
 
         "<h3>Маршрут сотрудника</h3>" +
 
-        "<div class=\"metric\">" +
-        "<b>Текущая зона:</b> " +
+        "<div class=\"metric\"><b>Текущая зона:</b> " +
         zone.name +
         "</div>" +
 
-        "<div class=\"metric\">" +
-        "<b>Следующая зона:</b> Подъезд 2, этаж 2" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>План следующей:</b> 10:30" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>Отставание:</b> 12 мин" +
-        "</div>" +
+        "<div class=\"metric\"><b>Следующая зона:</b> Подъезд 2, этаж 2</div>" +
+        "<div class=\"metric\"><b>План следующей:</b> 10:30</div>" +
+        "<div class=\"metric\"><b>Отставание:</b> 12 мин</div>" +
 
         "</div>" +
-
 
         "<div class=\"card\">" +
 
         "<h3>Исполнитель за 30 дней</h3>" +
 
-        "<div class=\"metric\">" +
-        "<b>Заданий:</b> 42" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>В срок:</b> 38" +
-        "</div>" +
-
-        "<div class=\"metric\">" +
-        "<b>С нарушением:</b> 4" +
-        "</div>" +
+        "<div class=\"metric\"><b>Заданий:</b> 42</div>" +
+        "<div class=\"metric\"><b>В срок:</b> 38</div>" +
+        "<div class=\"metric\"><b>С нарушением:</b> 4</div>" +
 
         "</div>" +
-
 
         "<div class=\"actions\">" +
 
-        "<button>" +
-        "Назначить повторную уборку" +
-        "</button>" +
-
-        "<button>" +
-        "Карточка сотрудника" +
-        "</button>" +
-
-        "<button>" +
-        "Дашборд клининга" +
-        "</button>" +
+        "<button>Назначить повторную уборку</button>" +
+        "<button>Карточка сотрудника</button>" +
+        "<button>Дашборд клининга</button>" +
 
         "</div>";
 }
 
 
 /* ==================================================
-   ЗАГРУЗКА ЗОНЫ
+   ЗАГРУЗКА ОБЫЧНОЙ ЗОНЫ
 ================================================== */
 
 async function loadZone() {
@@ -574,11 +504,8 @@ async function loadZone() {
                 Date.now(),
 
                 {
-                    method:
-                        "GET",
-
-                    cache:
-                        "no-store"
+                    method: "GET",
+                    cache: "no-store"
                 }
             );
 
@@ -599,14 +526,10 @@ async function loadZone() {
         }
 
 
-        showZone(
-            data.zone
-        );
+        showZone(data.zone);
 
 
-        if (
-            currentRole === "manager"
-        ) {
+        if (currentRole === "manager") {
 
             showManagerPanel(
                 data.zone
@@ -660,11 +583,9 @@ async function cleanerTouch() {
                 API_URL,
 
                 {
-                    method:
-                        "POST",
+                    method: "POST",
 
                     headers: {
-
                         "Content-Type":
                             "application/json"
                     },
@@ -701,10 +622,6 @@ async function cleanerTouch() {
         }
 
 
-        /*
-        ПЕРВОЕ КАСАНИЕ
-        */
-
         if (
             data.result ===
             "STARTED"
@@ -727,10 +644,6 @@ async function cleanerTouch() {
             return;
         }
 
-
-        /*
-        ВТОРОЕ КАСАНИЕ
-        */
 
         if (
             data.result ===
@@ -766,6 +679,160 @@ async function cleanerTouch() {
         throw new Error(
             "Неизвестный ответ API"
         );
+
+
+    } catch (error) {
+
+        showError(
+            error.message
+        );
+    }
+}
+
+
+/* ==================================================
+   ОСК — NFC CHECK-IN
+================================================== */
+
+async function inspectorTouch() {
+
+    document.getElementById(
+        "content"
+    ).innerHTML =
+
+        "<div class=\"card\">" +
+        "<div class=\"big-status\">" +
+        "ОСК" +
+        "</div>" +
+        "Подтверждаю контрольную точку..." +
+        "</div>";
+
+
+    try {
+
+        const response =
+            await fetch(
+
+                OSK_API_URL,
+
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            action:
+                                "start_inspection",
+
+                            task_id:
+                                TEST_OSK_TASK_ID,
+
+                            inspector_id:
+                                INSPECTOR_ID
+                        })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok ||
+            data.status !== "ok"
+        ) {
+
+            throw new Error(
+                data.message ||
+                "Ошибка начала проверки"
+            );
+        }
+
+
+        let checklistHtml = "";
+
+
+        if (data.checklist) {
+
+            data.checklist.forEach(
+                function(item) {
+
+                    checklistHtml +=
+
+                        "<div class=\"checklist-item\">" +
+
+                        "<b>" +
+                        item.item_no +
+                        ".</b> " +
+
+                        item.item_name +
+
+                        "</div>";
+                }
+            );
+        }
+
+
+        document.getElementById(
+            "content"
+        ).innerHTML =
+
+            "<div class=\"card ok\">" +
+
+            "<div class=\"big-status\">" +
+            "Контрольная точка подтверждена" +
+            "</div>" +
+
+            "<p><b>" +
+            data.task.object_name +
+            "</b></p>" +
+
+            "<p>" +
+            data.task.point_name +
+            "</p>" +
+
+            "<p>Проверка начата</p>" +
+
+            "</div>";
+
+
+        document.getElementById(
+            "inspector-panel"
+        ).innerHTML =
+
+            "<div class=\"card\">" +
+
+            "<h3>Задание ОСК</h3>" +
+
+            "<p><b>" +
+            data.task.title +
+            "</b></p>" +
+
+            "<p>Чек-лист: " +
+            data.checklist.length +
+            " пунктов</p>" +
+
+            checklistHtml +
+
+            "</div>" +
+
+            "<div class=\"card ok\">" +
+
+            "<div class=\"big-status\">" +
+            "Продолжите работу в MAX" +
+            "</div>" +
+
+            "<div>" +
+            "Чек-ин зафиксирован" +
+            "</div>" +
+
+            "</div>";
 
 
     } catch (error) {
@@ -861,11 +928,8 @@ document.getElementById(
 
                                 height =
                                     Math.round(
-
                                         height *
-
                                         MAX_PHOTO_SIZE /
-
                                         width
                                     );
 
@@ -876,11 +940,8 @@ document.getElementById(
 
                                 width =
                                     Math.round(
-
                                         width *
-
                                         MAX_PHOTO_SIZE /
-
                                         height
                                     );
 
@@ -938,7 +999,6 @@ document.getElementById(
                         preview.src =
                             dataUrl;
 
-
                         preview.style.display =
                             "block";
 
@@ -970,9 +1030,7 @@ document.getElementById(
             };
 
 
-        reader.readAsDataURL(
-            file
-        );
+        reader.readAsDataURL(file);
     }
 );
 
@@ -1009,11 +1067,9 @@ async function finishCleaning() {
                 API_URL,
 
                 {
-                    method:
-                        "POST",
+                    method: "POST",
 
                     headers: {
-
                         "Content-Type":
                             "application/json"
                     },
@@ -1068,9 +1124,7 @@ async function finishCleaning() {
             "</div>";
 
 
-        if (
-            data.zone
-        ) {
+        if (data.zone) {
 
             showZone(
                 data.zone
@@ -1078,8 +1132,7 @@ async function finishCleaning() {
         }
 
 
-        photoBase64 =
-            null;
+        photoBase64 = null;
 
 
     } catch (error) {
@@ -1095,9 +1148,7 @@ async function finishCleaning() {
    ОШИБКИ
 ================================================== */
 
-function showError(
-    message
-) {
+function showError(message) {
 
     document.getElementById(
         "error"
@@ -1120,15 +1171,31 @@ async function start() {
 
     showRole();
 
-    await loadZone();
+
+    /*
+    ОСК имеет отдельный сценарий.
+    Обычную карточку уборки инженеру
+    вообще не загружаем.
+    */
+
+    if (
+        currentRole ===
+        "inspector"
+    ) {
+
+        await inspectorTouch();
+
+        return;
+    }
 
 
     /*
-    Только уборщица автоматически
-    фиксирует касание.
-    Остальные роли просто получают
-    свой интерфейс.
+    Все остальные роли работают
+    по старой схеме.
     */
+
+    await loadZone();
+
 
     if (
         currentRole ===
