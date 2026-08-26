@@ -220,26 +220,73 @@ function setupRole() {
     const roleFromUrl =
         params.get("role");
 
-    const allowedRoles = [
-        "resident",
+    const logout =
+        params.get("logout");
+
+
+    // Сброс служебной роли.
+    // После сброса пользователь становится Жителем.
+
+    if (logout === "1") {
+
+        localStorage.removeItem(
+            "green_river_role"
+        );
+
+        currentRole = "resident";
+
+        alert(
+            "Служебная роль удалена. Режим: Житель"
+        );
+
+        return;
+    }
+
+
+    // Служебные роли, которые можно сохранить на телефоне.
+
+    const serviceRoles = [
         "cleaner",
         "manager",
-        "cleaning_manager",
-        "inspector"
+        "cleaning_manager"
     ];
 
 
     if (
         roleFromUrl &&
-        allowedRoles.includes(roleFromUrl)
+        serviceRoles.includes(roleFromUrl)
     ) {
 
         localStorage.setItem(
             "green_river_role",
             roleFromUrl
         );
+
+        currentRole =
+            roleFromUrl;
+
+        const names = {
+            cleaner:
+                "Сотрудник клининга",
+
+            manager:
+                "Управляющий МКД",
+
+            cleaning_manager:
+                "Руководитель подрядчика по клинингу"
+        };
+
+        alert(
+            "Роль сохранена: " +
+            names[roleFromUrl]
+        );
+
+        return;
     }
 
+
+    // Если служебной роли нет —
+    // пользователь является Жителем.
 
     currentRole =
         localStorage.getItem(
@@ -247,7 +294,6 @@ function setupRole() {
         ) ||
         "resident";
 }
-
 
 /* ==================================================
    ОПРЕДЕЛЕНИЕ ЗОНЫ
